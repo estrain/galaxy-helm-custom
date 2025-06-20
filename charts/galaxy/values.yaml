@@ -53,6 +53,15 @@ workflowHandlers:
     periodSeconds: 10
     failureThreshold: 30
     timeoutSeconds: 5
+  resources:
+    requests:
+      cpu: "7"
+      memory: "7Gi"
+      ephemeral-storage: "2Gi"
+    limits:
+      cpu: "7"
+      memory: "14Gi"
+      ephemeral-storage: "10Gi"
 
 webHandlers:
   replicaCount: 1
@@ -80,6 +89,15 @@ webHandlers:
     timeout: 300
     workers: 1
     extraArgs: ""
+  resources:
+    requests:
+      cpu: "7"
+      memory: "7Gi"
+      ephemeral-storage: "2Gi"
+    limits:
+      cpu: "7"
+      memory: "14Gi"
+      ephemeral-storage: "10Gi"
 
 jobHandlers:
   replicaCount: 1
@@ -103,6 +121,15 @@ jobHandlers:
     periodSeconds: 10
     failureThreshold: 30
     timeoutSeconds: 5
+  resources:
+    requests:
+      cpu: "7"
+      memory: "28Gi"
+      ephemeral-storage: "2Gi"
+    limits:
+      cpu: "7"
+      memory: "28Gi"
+      ephemeral-storage: "10Gi"
 
 celery:
   concurrency: 2
@@ -508,8 +535,9 @@ configs:
           rules_module: tpv.rules
           docker_default_container_id: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           tpv_config_files:
-            - https://gxy.io/tpv/db.yml
-            - lib/galaxy/jobs/rules/tpv_rules_local.yml
+            - config/tpv_rules_local.yml
+#            - https://gxy.io/tpv/db.yml
+#            - lib/galaxy/jobs/rules/tpv_rules_local.yml
 #     limits:
 #     - type: registered_user_concurrent_jobs
 #       value: 5
