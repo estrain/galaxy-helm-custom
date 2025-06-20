@@ -1,0 +1,198 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "galaxy.fullname" . }}-web
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+{{- with .Values.webHandlers.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  replicas: {{ .Values.webHandlers.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "galaxy.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: galaxy-web-handler
+  template:
+    metadata:
+      labels:
+        {{- include "galaxy.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: galaxy-web-handler
+      annotations:
+        checksum/galaxy_conf: {{ include (print $.Template.BasePath "/configs-galaxy.yaml") . | sha256sum }}
+        checksum/galaxy_rules: {{ include (print $.Template.BasePath "/configmap-galaxy-rules.yaml") . | sha256sum }}
+        checksum/galaxy_extras: {{ include (print $.Template.BasePath "/configmap-extra-files.yaml") . | sha256sum }}
+        {{- with .Values.webHandlers.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "galaxy.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- if .Values.webHandlers.podSpecExtra -}}
+        {{- tpl (toYaml .Values.webHandlers.podSpecExtra) . | nindent 6 }}
+      {{- end }}
+      initContainers:
+        - name: {{ .Chart.Name }}-wait-db
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ['sh', '-c', '{{ include "galaxy.init-container-wait-command" . }} sleep {{ .Values.webHandlers.startupDelay }};']
+          volumeMounts:
+            - name: galaxy-data
+              mountPath: /galaxy/server/config/mutable/
+              subPath: config
+        {{- if .Values.extraInitContainers -}}
+        {{- range $each := .Values.extraInitContainers -}}
+        {{- if $each.applyToWeb -}}
+        {{- print "- " | nindent 8 -}}
+        {{- tpl ((unset (unset (unset ($each | deepCopy) "applyToJob") "applyToWeb") "applyToWorkflow") | toYaml | indent 10 | trim) $ -}}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}-web
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: galaxy-http
+              containerPort: 8080
+              protocol: TCP
+          env:
+          {{ include "galaxy.podEnvVars" . }}
+          args: [
+            'sh', '-c',
+            '{{- if .Values.extraInitCommands -}}
+             {{- tpl .Values.extraInitCommands $ | nindent 13 }};
+             {{- end -}}
+             /galaxy/server/.venv/bin/gunicorn "galaxy.webapps.galaxy.fast_factory:factory()" --timeout {{ .Values.webHandlers.gunicorn.timeout | default 300 }} --pythonpath /galaxy/server/lib -k galaxy.webapps.galaxy.workers.Worker -b 0.0.0.0:8080 --workers={{ .Values.webHandlers.gunicorn.workers | default 1 }} --config python:galaxy.web_stack.gunicorn_config --preload {{ .Values.webHandlers.gunicorn.extraArgs | default "" }}']
+          {{- if .Values.webHandlers.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ template "galaxy.add_trailing_slash" .Values.ingress.path }}api/version
+              port: 8080
+            initialDelaySeconds: {{ .Values.webHandlers.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webHandlers.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.webHandlers.startupProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.webHandlers.startupProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.webHandlers.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ template "galaxy.add_trailing_slash" .Values.ingress.path }}api/version
+              port: 8080
+            initialDelaySeconds: {{ .Values.webHandlers.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webHandlers.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.webHandlers.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.webHandlers.readinessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.webHandlers.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ template "galaxy.add_trailing_slash" .Values.ingress.path }}api/version
+              port: 8080
+            initialDelaySeconds: {{ .Values.webHandlers.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.webHandlers.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.webHandlers.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.webHandlers.livenessProbe.failureThreshold }}
+          {{- end }}
+          volumeMounts:
+            {{- range $key, $entry := .Values.extraFileMappings -}}
+            {{- if $entry.applyToWeb }}
+            - name: {{ include "galaxy.getExtraFilesUniqueName" $key }}
+              mountPath: {{ $key }}
+              subPath: {{ include "galaxy.getFilenameFromPath" $key }}
+            {{- end }}
+            {{- end }}
+            {{- range $key,$entry := .Values.configs }}
+            {{ if $entry -}}
+            - name: galaxy-conf-files
+              mountPath: /galaxy/server/config/{{ $key }}
+              subPath: {{ $key }}
+            {{- end -}}
+            {{- end }}
+            {{- range $key,$entry := .Values.jobs.rules }}
+            - name: galaxy-job-rules
+              mountPath: /galaxy/server/lib/galaxy/jobs/rules/{{ $key }}
+              subPath: {{ $key }}
+            {{- end }}
+            - name: galaxy-data
+              mountPath: {{ .Values.persistence.mountPath }}
+            - name: galaxy-data
+              mountPath: /galaxy/server/config/mutable/
+              subPath: config
+            {{- if .Values.setupJob.downloadToolConfs.enabled }}
+            - name: galaxy-data
+              mountPath: {{ .Values.setupJob.downloadToolConfs.volume.mountPath }}
+              subPath: {{ .Values.setupJob.downloadToolConfs.volume.subPath }}
+            {{- end }}
+            {{- if .Values.refdata.enabled }}
+            - name: refdata-gxy
+              mountPath: /cvmfs/data.galaxyproject.org
+            {{- if eq .Values.refdata.type "cvmfs" }}
+              subPath: data.galaxyproject.org
+              # CVMFS automount volumes must be mounted with HostToContainer mount propagation.
+              mountPropagation: HostToContainer
+            {{- end }}
+            {{- end }}
+            {{- if .Values.extraVolumeMounts }}
+            {{- tpl (.Values.extraVolumeMounts | toYaml | nindent 12) . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: galaxy-conf-files
+          {{- if .Values.useSecretConfigs }}
+          secret:
+            secretName: {{ template "galaxy.fullname" . }}-configs
+          {{- else }}
+          configMap:
+            name: {{ template "galaxy.fullname" . }}-configs
+          {{- end }}
+        {{- range $key, $entry := .Values.extraFileMappings -}}
+        {{- if $entry.applyToWeb }}
+        - name: {{ include "galaxy.getExtraFilesUniqueName" $key }}
+          {{- if $entry.useSecret }}
+          secret:
+            secretName: {{ printf "%s-%s" (include "galaxy.fullname" $) (include "galaxy.getExtraFilesUniqueName" $key) }}
+          {{- else }}
+          configMap:
+            name: {{ printf "%s-%s" (include "galaxy.fullname" $) (include "galaxy.getExtraFilesUniqueName" $key) }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        - name: galaxy-job-rules
+          configMap:
+            name: {{ template "galaxy.fullname" . }}-job-rules
+        - name: galaxy-data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "galaxy.pvcname" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if .Values.refdata.enabled }}
+        - name: refdata-gxy
+          persistentVolumeClaim:
+            claimName: {{ template "galaxy.fullname" $ -}}-refdata-gxy-pvc
+        {{- end }}
+        {{- if .Values.extraVolumes }}
+        {{- tpl (.Values.extraVolumes | toYaml | nindent 8) . }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}

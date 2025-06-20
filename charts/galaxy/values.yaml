@@ -1,0 +1,803 @@
+# Default values for Galaxy.
+# Declare variables to be passed into your templates.
+
+#- Partial override of the `galaxy.fullname`.  The `.Release.Name` will be prepended to generate the fullname.
+nameOverride: ""
+#- Fully override the `galaxy.fullname`
+fullnameOverride: ""
+
+image:
+  #- Repository containing the Galaxy image.
+  repository: quay.io/galaxyproject/galaxy-min
+  #- Galaxy Docker image tag (generally corresponds to the desired Galaxy version)
+  tag: "24.1.1"  # Galaxy versions prior to 24.1.1 contain a bug mapping the extra_files directory
+  #-  Galaxy image [pull policy](https://kubernetes.io/docs/concepts/configuration/overview/#container-images)
+  pullPolicy: IfNotPresent
+
+#- Secrets used to [access a Galaxy image from a private repository](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/)
+imagePullSecrets: []
+
+trainingHook:
+  #- Enable the GTN webhook to link references to tools in tutorials to the corresponding tool panel in Galaxy.
+  enabled: false
+  #- The training material server used to service the training-material webhook.
+  url: https://training.galaxyproject.org/training-material/
+
+service:
+  #- The Galaxy service type
+  type: ClusterIP
+  #- The port Galaxy is listening to
+  port: 8000
+  #- The external port exposed on each node
+  nodePort: 30700
+
+workflowHandlers:
+  replicaCount: 1
+  startupDelay: 10 # used to avoid race conditions
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    failureThreshold: 80
+    timeoutSeconds: 5
+  readinessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 12
+    timeoutSeconds: 5
+  livenessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 30
+    timeoutSeconds: 5
+
+webHandlers:
+  replicaCount: 1
+  startupDelay: 0 # used to avoid race conditions
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    failureThreshold: 80
+    timeoutSeconds: 5
+  readinessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 12
+    timeoutSeconds: 5
+  livenessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 30
+    timeoutSeconds: 5
+  gunicorn:
+    timeout: 300
+    workers: 1
+    extraArgs: ""
+
+jobHandlers:
+  replicaCount: 1
+  startupDelay: 5 # used to avoid race conditions
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  startupProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 5
+    failureThreshold: 80
+    timeoutSeconds: 5
+  readinessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 12
+    timeoutSeconds: 5
+  livenessProbe:
+    enabled: true
+    periodSeconds: 10
+    failureThreshold: 30
+    timeoutSeconds: 5
+
+celery:
+  concurrency: 2
+  logLevel: "INFO"
+  extraArgs: ""
+  replicaCount: 1
+  startupDelay: 5 # used to avoid race conditions
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 15
+    periodSeconds: 60
+    failureThreshold: 40
+    timeoutSeconds: 10
+  readinessProbe:
+    enabled: false
+    periodSeconds: 60
+    failureThreshold: 12
+    timeoutSeconds: 10
+  livenessProbe:
+    enabled: false
+    periodSeconds: 60
+    failureThreshold: 30
+    timeoutSeconds: 10
+
+celeryBeat:
+  logLevel: "INFO"
+  extraArgs: ""
+  replicaCount: 1
+  startupDelay: 5 # used to avoid race conditions
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  startupProbe:
+    enabled: false
+    initialDelaySeconds: 15
+    periodSeconds: 60
+    failureThreshold: 40
+    timeoutSeconds: 10
+  readinessProbe:
+    enabled: false
+    periodSeconds: 60
+    failureThreshold: 12
+    timeoutSeconds: 10
+  livenessProbe:
+    enabled: false
+    periodSeconds: 60
+    failureThreshold: 30
+    timeoutSeconds: 10
+
+metrics:
+  #- Enable the metrics server. Defaults to `false`
+  enabled: false
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  image:
+    repository: cloudve/galaxy-metrics-scraper
+    tag: 2.1.0
+    pullPolicy: IfNotPresent
+
+serviceAccount:
+  #- Specifies whether a service account should be created
+  create: true
+  #- Annotations to add to the service account
+  annotations: {}
+  #- The name of the service account to use.
+  #- If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  #- Does the cluster use role based access control.
+  enabled: true
+
+securityContext:
+  #- Security context and file system group used by jobs.
+  fsGroup: 101
+
+#- Configure the PVC used by Galaxy for local storage.
+persistence:
+  #- Persistence is enabled by default
+  enabled: true
+  #- Name of the PVC to create
+  name: galaxy-pvc
+  annotations: {}
+  #- StorageClass for the PVC. Must support `ReadWriteMany`.
+  storageClass: ""
+  #- The name of an existing PVC to use for persistence.
+  existingClaim: null
+  accessMode: ReadWriteMany
+  size: 5Gi
+  mountPath: /galaxy/server/database
+
+extraVolumes: []
+#   - name: shared-data
+#     persistentVolumeClaim:
+#       claimName: shared-data-pvc
+
+extraVolumeMounts: []
+#   - name: shared-data
+#     mountPath: /mnt/project/shared-data
+
+#- tasks to perform once after installation
+setupJob:
+  #- create the database
+  createDatabase: true
+  securityContext:
+    #- the setup jobs will run as this user
+    runAsUser: 101
+    #- the `runAsUser` will belong to this group.
+    runAsGroup: 101
+    #- the filesystem group
+    fsGroup: 101
+  ttlSecondsAfterFinished: 300
+  downloadToolConfs:
+    enabled: true
+    # Uses Galaxy's shared file system volume
+    volume:
+      subPath: cvmfsclone # on galaxy-data volume (avoid config, tools, lib, etc...)
+      mountPath: /cvmfs/cloud.galaxyproject.org
+    archives:
+      #- A tar.gz publicly accessible archive containing AT LEAST conf files and XML tool wrappers.
+      #- Meant to be enough for Galaxy handlers to startup
+      startup: https://storage.googleapis.com/cloud-cvmfs/startup.tar.gz
+      #- A tar.gz publicly accessible archive containing AT LEAST confs, tool wrappers, and scripts
+      #- excluding test data.
+      #- Meant to be enough for Galaxy handlers to run jobs.
+      running: https://storage.googleapis.com/cloud-cvmfs/partial.tar.gz
+      #- A tar.gz publicly accessible archive containing the full `tools` directory,
+      #- including each tool's test data.
+      #- Meant to be enough to run automated tool-tests, fully mimicking CVMFS setup
+      full: https://storage.googleapis.com/cloud-cvmfs/contents.tar.gz
+
+#- Allow users to specify extra init containers
+extraInitContainers: []
+#   - name: my-first-container
+#     applyToJob: true
+#     applyToWeb: true
+#     applyToWorkflow: true
+#     image: "{{.Values.image.repository}}:{{.Values.image.tag}}"
+#     args: ['sh', '-c', 'cp "/galaxy/server/config/job_conf.xml.sample_advanced" {{.Values.persistence.mountPath}}/']
+#     volumeMounts:
+#       - name: galaxy-data
+#         mountPath: "{{.Values.persistence.mountPath}}"
+#   - name: my-second-container
+#     applyToJob: true
+#     applyToWeb: false
+#     applyToWorkflow: true
+#     image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+#     args: ['sh', '-c', 'cp "/galaxy/server/config/galaxy.yml" {{.Values.persistence.mountPath}}/']
+#     volumeMounts:
+#       - name: galaxy-data
+#         mountPath: "{{.Values.persistence.mountPath}}"
+
+extraInitCommands: ""
+#  echo "Running extra mapped script. Influx enabled = {{ .Values.influxdb.enabled }}";
+#  /galaxy/server/extra/mapped/script.sh
+
+extraEnv: []
+  # - name: EXAMPLE_ENV
+  #   value: MY_VALUE
+
+#- CronJobs to perform periodic maintenance tasks
+cronJobs:
+  #- Runs the maintenance.sh script to purge items in the Galaxy database that
+  #- have been flagged as deleted.
+  maintenance:
+    enabled: true
+    schedule: "5 2 * * *"
+    extraSettings:
+      #- Purge items older than this.
+      days: '7'
+    securityContext:
+      runAsUser: 0
+    defaultEnv: true
+    command:
+      - "/galaxy/server/scripts/maintenance.sh"
+    args:
+      - "--no-dry-run"
+      - "--days"
+      - "{{ tpl .Values.cronJobs.maintenance.extraSettings.days $ }}"
+  #- Remove files from the tmp directory that are older than the allowable wall time for a job
+  tmpdir:
+    enabled: true
+    schedule: "15 2 * * *"
+    extraSettings:
+      lastModified: '{{ index .Values "configs" "job_conf.yml" "runners" "k8s" "k8s_walltime_limit" | default 604800 }}'
+    securityContext:
+      runAsUser: 0
+    command:
+      - /usr/bin/find
+    args:
+      - "{{ .Values.persistence.mountPath }}/tmp"
+      - "!"
+      - "-newermt"
+      - "{{ tpl .Values.cronJobs.tmpdir.extraSettings.lastModified $ }} seconds ago"
+      - "-type"
+      - "f"
+      - "-exec"
+      - "rm"
+      - "{}"
+      - ";"
+#  #- An example cron job that showcases all available features.
+#  example:
+#    #- Disable the job by scheduling it for a date that never occurs, I.E. Feb 30th
+#    #- The job can still be triggered manually.
+#    schedule: "0 0 30 2 *"
+#    #- Include the set of default environment variables. See galaxy.podEnvVars
+#    #- in the Helm chart's _helpers.tpl for the variables that will be defined.
+#    defaultEnv: true
+#    #- Define extra environment variables that will be available to the job
+#    extraEnv:
+#      - name: LOGFILE
+#        value: /galaxy/server/database/example.log
+#    #- Run the job as root (uid 0)
+#    securityContext:
+#      runAsUser: 0
+#    #- Specify an alternate Docker image for the CronJob container
+#    image:
+#      repository: ksuderman/galaxy-maintenance
+#      tag: "0.7"
+#    #- The command to be run
+#    command:
+#      - /usr/local/bin/example.sh
+#    #- Command line arguments to be passed to the command, one per line.
+#    args:
+#      - "--option"
+#      - "value"
+#    #- Define extra files that will be mounted into the image. In this case we
+#    #- mount a simple Bash script that will write the current environment
+#    #- variables to persistent storage.
+#    extraFileMappings:
+#      #- Path were the file will be mounted
+#      /usr/local/bin/example.sh:
+#        #- Default permission on the file.  In this case 'rwxr-xr-x'
+#        mode: "0755"
+#        #- Run the contents through the Helm `tpl` command
+#        tpl: true
+#        #- The contents of the file to be mounted.  Can contain Helm template values
+#        #- if `tpl` is set to true.
+#        content: |-
+#          #!/usr/bin/bash
+#          echo {{ .Release.Name }} >> $LOGFILE
+#          echo "$@" >> $LOGFILE
+#          env >> $LOGFILE
+
+ingress:
+  #- Should ingress be enabled. Defaults to `true`
+  enabled: true
+  ingressClassName: nginx
+  canary:
+    enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10G"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  path: /galaxy
+  hosts:
+    - host: ~
+      paths:
+        - path: "/galaxy"
+        - path: "/training-material"
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources:
+  #- We recommend updating these based on the usage levels of the server.
+  requests:
+    cpu: 100m
+    memory: 1G
+    ephemeral-storage: 1Gi
+  limits:
+    cpu: 3
+    memory: 7G
+    ephemeral-storage: 10Gi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+postgresql:
+  enabled: true
+  #- hostname and port of an existing database to use.
+  existingDatabase:
+  galaxyDatabaseUser: galaxydbuser
+  galaxyConnectionParams: "?sslmode=require"
+  # Password is autogenerated and stored in a secret if not specified
+  # galaxyDatabasePassword:
+  # galaxyExistingSecret:
+  # galaxyExistingSecretKeyRef:
+  operator:
+    operatorSpecExtra:
+  nameOverride: postgres
+  persistence:
+    enabled: true
+    #storageClass:
+    #size:
+    #extra:
+    #  selector:
+    #    matchLabels:
+    #      label-key: label-value
+
+#- Configuration block for reference data
+refdata:
+  #- Whether or not to mount cloud-hosted Galaxy reference data and tools.
+  enabled: true
+  #- `s3csi` or `cvmfs`, determines the CSI to use for mounting reference data.
+  #-`cvmfs` is the default and recommended for the time being.
+  type: cvmfs
+  pvc:
+    size: 10Gi
+
+#- Configuration block if `cvmfs` is used as `refdata.type`
+cvmfs:
+  #- Deploy the Galaxy-CVMFS-CSI Helm Chart. This is an optional dependency, and for production scenarios it should be deployed separately as a cluster-wide resource
+  deploy: true
+  storageClassName: "galaxy-cvmfs"
+
+#- Configuration block if `s3csi` is used as the `refdata.type`
+s3csi:
+  storageClass:
+    name: refdata-gxy-data
+    mounter: s3fs
+    singleBucket: biorefdata
+    mountOptions: "-o use_cache=/tmp -o endpoint=ap-southeast-2 -o public_bucket=1 -o enable_noobj_cache -o no_check_certificate -o kernel_cache -o ensure_diskfree=5000"
+    # additional optimizations for s3fs
+    # -o max_background=1000 -o max_stat_cache_size=1000000 -o multipart_size=52 -o parallel_count=30 -o multireq_max=30 -o dbglevel=warn
+    # future settings for geesefs
+    # mountOptions: "--memory-limit 4000 --dir-mode 0777 --file-mode 0666 --cache /tmp/geesecache --debug --debug_fuse --stat-cache-ttl 9m0s --cache-to-disk-hits 1"
+    # --no-dir-object --no-implicit-dir --stat-cache-ttl 120m0s --max-disk-cache-fd 4096
+  secret:
+    prefix: /galaxy/v1/data.galaxyproject.org
+
+#- When this flag is set to true, all configs will be set in secrets,
+#- when it is set to false, all configs will be set in configmaps
+useSecretConfigs: false
+
+#- All config files will be relative to `/galaxy/server/config/` directory
+configs:
+  job_conf.yml:
+    runners:
+      local:
+        load: galaxy.jobs.runners.local:LocalJobRunner
+        workers: 4
+      k8s:
+        load: galaxy.jobs.runners.kubernetes:KubernetesJobRunner
+        k8s_use_service_account: true
+        k8s_data_volume_claim: |-
+          {{ template "galaxy.pvcname" . -}}:{{ .Values.persistence.mountPath -}}
+        k8s_working_volume_claim: |-
+          {{ template "galaxy.pvcname" . -}}:{{ .Values.persistence.mountPath -}}
+        k8s_persistent_volume_claims: |-
+          {{ template "galaxy.pvcname" . -}}/config:{{ .Values.persistence.mountPath -}}/config:r,
+          {{- template "galaxy.pvcname" . -}}/tmp:{{ .Values.persistence.mountPath -}}/tmp:rw,
+          {{- template "galaxy.pvcname" . -}}/tool-data:{{ .Values.persistence.mountPath -}}/tool-data:rw,
+          {{- template "galaxy.pvcname" . -}}/tools:{{ .Values.persistence.mountPath -}}/tools:r,
+          {{- template "galaxy.pvcname" . -}}/shed_tools:{{ .Values.persistence.mountPath -}}/shed_tools:r
+          {{- if .Values.refdata.enabled -}}
+          {{- if eq .Values.refdata.type "cvmfs" -}}
+          ,{{- template "galaxy.fullname" $ -}}-refdata-gxy-pvc/data.galaxyproject.org:/cvmfs/data.galaxyproject.org:r
+          {{- else -}}
+          ,{{- template "galaxy.fullname" $ -}}-refdata-gxy-pvc:/cvmfs/data.galaxyproject.org:r
+          {{- end -}}
+          {{- end -}}
+          {{- if .Values.setupJob.downloadToolConfs.enabled -}}
+          ,{{ template "galaxy.pvcname" . -}}/{{ .Values.setupJob.downloadToolConfs.volume.subPath }}:{{ .Values.setupJob.downloadToolConfs.volume.mountPath -}}:r
+          {{- end -}}
+          {{- if .Values.extraVolumes -}}
+          {{- template "galaxy.extra_pvc_mounts" . -}}
+          {{- end }}
+        k8s_namespace: "{{ .Release.Namespace }}"
+        k8s_galaxy_instance_id: "{{ .Release.Name }}"
+        k8s_fs_group_id: "101"
+        k8s_supplemental_group_id: "101"
+        k8s_pull_policy: IfNotPresent
+        k8s_cleanup_job: onsuccess
+        k8s_job_ttl_secs_after_finished: 90
+        k8s_pod_priority_class: >-
+          {{ if .Values.jobs.priorityClass.enabled -}}
+            {{- include "galaxy.pod-priority-class" . }}
+          {{- end }}
+        k8s_interactivetools_use_ssl: true
+        k8s_interactivetools_ingress_annotations: |
+          {{.Values.ingress.annotations | toYaml | nindent 6 }}
+    handling:
+      assign:
+        - "db-skip-locked"
+    execution:
+      default: tpv_dispatcher
+      environments:
+        tpv_dispatcher:
+          container_monitor: false
+          runner: dynamic
+          type: python
+          function: map_tool_to_destination
+          rules_module: tpv.rules
+          docker_default_container_id: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          tpv_config_files:
+            - https://gxy.io/tpv/db.yml
+            - lib/galaxy/jobs/rules/tpv_rules_local.yml
+#     limits:
+#     - type: registered_user_concurrent_jobs
+#       value: 5
+#     - type: anonymous_user_concurrent_jobs
+#       value: 2
+
+  #- Galaxy configuration. See the [Galaxy documentation](https://docs.galaxyproject.org/en/master/admin/config.html)
+  #- for more information.
+  galaxy.yml:
+    galaxy:
+      galaxy_url_prefix: "{{ .Values.ingress.path }}"
+      interactivetools_enable: true
+      interactivetools_map: database/interactivetools_map.sqlite
+      interactivetools_prefix: "its"
+      interactivetools_proxy_host: '{{ $host := index .Values.ingress.hosts 0 }}{{ default "localhost" $host.host}}'
+      interactivetools_shorten_url: true
+      interactivetools_base_path: "{{$host := index .Values.ingress.hosts 0}}{{$path := index $host.paths 0}}{{$path.path}}"
+      id_secret:
+      mulled_resolution_cache_lock_dir: "/galaxy/server/local/mulled_cache_lock"
+      database_connection: |-
+        {{ include "galaxy-postgresql.connection-string" .}}
+      integrated_tool_panel_config: "/galaxy/server/config/mutable/integrated_tool_panel.xml"
+      sanitize_allowlist_file: "/galaxy/server/config/mutable/sanitize_allowlist.txt"
+      tool_config_file: "/galaxy/server/config/tool_conf.xml{{if .Values.setupJob.downloadToolConfs.enabled}},{{ .Values.setupJob.downloadToolConfs.volume.mountPath }}/config/shed_tool_conf.xml{{end}}"
+      shed_tool_config_file: "/galaxy/server/config/mutable/editable_shed_tool_conf.xml"
+      enable_tool_document_cache: false
+      tool_data_table_config_path: |-
+        {{ if .Values.setupJob.downloadToolConfs.enabled }}
+        {{- .Values.setupJob.downloadToolConfs.volume.mountPath }}/config/shed_tool_data_table_conf.xml
+        {{- if .Values.refdata.enabled -}}
+        ,/cvmfs/data.galaxyproject.org/managed/location/tool_data_table_conf.xml,/cvmfs/data.galaxyproject.org/byhand/location/tool_data_table_conf.xml
+        {{- end }}
+        {{- else }}
+        {{- if .Values.refdata.enabled -}}
+        /cvmfs/data.galaxyproject.org//managed/location/tool_data_table_conf.xml,/cvmfs/data.galaxyproject.org/byhand/location/tool_data_table_conf.xml
+        {{- end }}
+        {{- end }}
+      tool_dependency_dir: "{{.Values.persistence.mountPath}}/deps"
+      job_config_file: "/galaxy/server/config/job_conf.yml"
+      outputs_to_working_directory: true
+      builds_file_path: |-
+        {{ if .Values.refdata.enabled }}
+        /cvmfs/data.galaxyproject.org/managed/location/builds.txt
+        {{- end }}
+      containers_resolvers_config_file: "/galaxy/server/config/container_resolvers_conf.xml"
+      workflow_schedulers_config_file: "/galaxy/server/config/workflow_schedulers_conf.xml"
+      build_sites_config_file: "/galaxy/server/config/build_sites.yml"
+      shed_data_manager_config_file: "/galaxy/server/config/mutable/shed_data_manager_conf.xml"
+      shed_tool_data_table_config: "/galaxy/server/config/mutable/shed_tool_data_table_conf.xml"
+      enable_data_manager_user_view: true
+      tool_path: "{{.Values.persistence.mountPath}}/tools"
+      tool_data_path: "{{.Values.persistence.mountPath}}/tool-data"
+      conda_auto_init: false
+      nginx_x_accel_redirect_base: >-
+        {{include "galaxy.add_trailing_slash" .Values.ingress.path}}_x_accel_redirect
+      len_file_path: |-
+        {{ if .Values.refdata.enabled -}}
+        /cvmfs/data.galaxyproject.org/managed/len/ucsc
+        {{- end }}
+  container_resolvers_conf.xml: |
+    <containers_resolvers>
+      <explicit />
+      <mulled />
+    </containers_resolvers>
+  workflow_schedulers_conf.xml: |
+    <?xml version="1.0"?>
+    <workflow_schedulers default="core">
+      <core id="core" />
+      <handlers default="schedulers">
+          <handler id="workflow_scheduler0" tags="schedulers"/>
+      </handlers>
+    </workflow_schedulers>
+  sanitize_allowlist.txt: |
+    toolshed.g2.bx.psu.edu/repos/bgruening/diff/
+    toolshed.g2.bx.psu.edu/repos/bgruening/pharmcat/
+    toolshed.g2.bx.psu.edu/repos/crs4/taxonomy_krona_chart/
+    toolshed.g2.bx.psu.edu/repos/devteam/fastqc/
+    toolshed.g2.bx.psu.edu/repos/iuc/dexseq/
+    toolshed.g2.bx.psu.edu/repos/iuc/fastp/
+    toolshed.g2.bx.psu.edu/repos/iuc/jbrowse/
+    toolshed.g2.bx.psu.edu/repos/iuc/macs2/
+    toolshed.g2.bx.psu.edu/repos/iuc/meme_meme/
+    toolshed.g2.bx.psu.edu/repos/iuc/multiqc/
+    toolshed.g2.bx.psu.edu/repos/iuc/prestor_abseq3/
+    toolshed.g2.bx.psu.edu/repos/iuc/quast/
+    toolshed.g2.bx.psu.edu/repos/iuc/seurat/
+    toolshed.g2.bx.psu.edu/repos/iuc/snpeff/
+    toolshed.g2.bx.psu.edu/repos/bgruening/plotly_regression_performance_plots/
+    toolshed.g2.bx.psu.edu/repos/bgruening/plotly_parallel_coordinates_plot/
+  build_sites.yml:
+    - type: ucsc
+      file: "{{if .Values.refdata.enabled}}/cvmfs/data.galaxyproject.org/managed/location/ucsc_build_sites.txt{{else}}/galaxy/server/tool-data/shared/ucsc/ucsc_build_sites.txt.sample{{end}}"
+      display: [main,archaea,ucla]
+    - type: gbrowse
+      file: "/galaxy/server/tool-data/shared/gbrowse/gbrowse_build_sites.txt"
+      display: [wormbase,tair,modencode_worm,modencode_fly]
+    - type: ensembl
+      file: "/galaxy/server/tool-data/shared/ensembl/ensembl_sites.txt"
+    - type: ensembl_data_url
+      file: "/galaxy/server/tool-data/shared/ensembl/ensembl_sites_data_URL.txt"
+    - type: igv
+      file: "/galaxy/server/tool-data/shared/igv/igv_build_sites.txt.sample"
+    - type: rviewer
+      file: "/galaxy/server/tool-data/shared/rviewer/rviewer_build_sites.txt.sample"
+  # Although this is only one line, the multi-line entry allows us to avoid wrapping
+  # the entire expression in quotes, which would need to be removed in the configmap
+  integrated_tool_panel.xml: |
+    {{- (.Files.Get "files/configs/integrated_tool_panel.xml") }}
+  tool_conf.xml: |
+    {{- (.Files.Get "files/configs/tool_conf.xml") }}
+
+#- Additional dynamic rules to map into the container.
+jobs:
+  init:
+    #- The Docker image to use for the init containers
+    image:
+      repository: alpine
+      tag: 3.16
+      pullPolicy: IfNotPresent
+  priorityClass:
+    #- Assign a [priorityClass](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/#priorityclass) to the dispatched jobs.
+    enabled: true
+    existingClass: ""
+    value: -1000
+  rules:
+    tpv_rules_local.yml:
+      global:
+        default_inherits: default
+      tools:
+        default:
+          params:
+            container_monitor: false
+            docker_default_container_id: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+            tmp_dir: "true"
+          scheduling:
+            reject:
+              - local
+              - offline
+          rules:
+            - id: force_default_container_for_built_in_tools
+              if: |
+                from galaxy.tools import GALAXY_LIB_TOOLS_UNVERSIONED
+                tool.id in GALAXY_LIB_TOOLS_UNVERSIONED or "CONVERTER_" == tool.id[:10] or tool.is_datatype_converter
+              params:
+                docker_container_id_override: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        Summary_Statistics1:
+          params:
+            docker_container_id_override: cloudve/gsummary:latest
+        toolshed.g2.bx.psu.edu/repos/devteam/data_manager_sam_fasta_index_builder/sam_fasta_index_builder/.*:
+          params:
+            docker_container_id_override: cloudve/sam-fasta-dm:latest
+        toolshed.g2.bx.psu.edu/repos/devteam/data_manager_bwa_mem_index_builder/bwa_mem_index_builder_data_manager/.*:
+          params:
+            docker_container_id_override: cloudve/bwa-dm:latest
+        toolshed.g2.bx.psu.edu/repos/crs4/prokka/prokka/1.14.5:
+          params:
+            docker_container_id_override: cloudve/prokka:1.14.5
+        toolshed.g2.bx.psu.edu/repos/iuc/jbrowse/jbrowse/1.16.5+galaxy6:
+          params:
+            docker_container_id_override: cloudve/jbrowse:1.16.5
+        sort1:
+          params:
+            docker_container_id_override: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        Grouping1:
+          params:
+            docker_container_id_override: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+      destinations:
+        k8s:
+          runner: k8s
+          params:
+            docker_enabled: "true"
+            requests_cpu: "{cores}"
+            requests_memory: "{mem}Gi"
+            limits_cpu: "{cores}"
+            limits_memory: "{mem}Gi"
+          scheduling:
+            accept:
+              - docker
+        local:
+          runner: local
+          scheduling:
+            require:
+              - local
+
+extraFileMappings:
+  /galaxy/server/static/welcome.html:
+    useSecret: false
+    applyToJob: false
+    applyToWeb: true
+    applyToSetupJob: false
+    applyToWorkflow: false
+    applyToNginx: true
+    tpl: true
+    content: |
+      <!DOCTYPE html>
+      <html lang="en">
+          <head>
+              <meta charset="utf-8">
+              <link rel="stylesheet" href="dist/base.css" type="text/css" />
+          </head>
+          <body class="m-0">
+              <div class="py-4">
+                  <div class="container">
+                      <h2>Welcome to <strong>Galaxy v{{ .Chart.AppVersion }}</strong></h2>
+                      <br>
+                      <a target="_blank" href="https://docs.galaxyproject.org/en/master/" class="btn btn-primary">Documentation »</a>
+                      <a target="_blank" href="https://galaxyproject.org" class="btn btn-primary">Community Hub »</a>
+                  </div>
+                  <br>
+                  {{- if .Values.influxdb.enabled }}
+                  <div class="container">
+                      <iframe width="100%" height="1300px" frameborder="0" marginheight="0" marginwidth="0"
+                          src="/grafana/d/gxy_general_stats_{{ .Release.Name }}/galaxy-overview?refresh=60s&orgId=1&kiosk&theme=light"></iframe>
+                  </div>
+                  {{- end }}
+              </div>
+              <div class="container">
+                  <footer class="text-center">
+                      <p>Galaxy v{{ .Chart.AppVersion }}, Helm Chart v{{ .Chart.Version }}</p>
+                  </footer>
+              </div>
+          </body>
+      </html>
+
+influxdb:
+  enabled: false
+  url: ""
+  username: ""
+  password: ""
+
+nginx:
+  galaxyStaticDir: "/galaxy/server/static"
+  image:
+    repository: nginx
+    tag: 1.22.0
+    pullPolicy: IfNotPresent
+  containerPort: 7080
+  conf:
+    client_max_body_size: 100g
+  resources:
+    # We recommend updating these based on the usage levels of the server
+    requests:
+      cpu: 100m
+      memory: 500M
+      ephemeral-storage: 10Gi
+    limits:
+      cpu: 2
+      memory: 3G
+      ephemeral-storage: 100Gi
+
+tusd:
+  enabled: true
+  replicaCount: 1
+  annotations: {}
+  podAnnotations: {}
+  podSpecExtra: {}
+  securityContext:
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
+  image:
+    repository: tusproject/tusd
+    tag: v1.13.0
+    pullPolicy: IfNotPresent
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-buffering: "off"
+      nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+      nginx.ingress.kubernetes.io/connection-proxy-header: "Upgrade"
+      nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    hosts:
+      - host: ~
+        paths:
+          - path: "/galaxy/api/upload/resumable_upload"
+    tls: []
+
+rabbitmq:
+  enabled: true
+  existingCluster:
+  existingSecret: '{{ include "galaxy-rabbitmq.fullname" . }}-default-user'
+  protocol: amqp
+  port: 5672
+  nameOverride: rabbitmq
+  extraSpec: {}
+  terminationGracePeriodSeconds: 90
+  persistence:
+    storageClassName:
+    storage:

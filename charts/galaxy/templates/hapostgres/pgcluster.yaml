@@ -1,0 +1,31 @@
+{{- if and .Values.postgresql.enabled (not .Values.postgresql.existingDatabase) }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+  name: {{ include "galaxy-postgresql.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  instances: {{ default "1" .Values.postgresql.instances }}
+  bootstrap:
+    initdb:
+      database: galaxy
+      owner: {{ .Values.postgresql.galaxyDatabaseUser }}
+      secret:
+        name: '{{ include "galaxy.galaxyDbSecretName" . }}'
+  enableSuperuserAccess: true
+  superuserSecret:
+    name: 'postgres.{{ include "galaxy-postgresql.fullname" . }}.credentials.postgresql.cnpg.io'
+  storage:
+    size: {{ default "10Gi" .Values.postgresql.persistence.size }}
+    {{- if .Values.postgresql.persistence.storageClass }}
+    storageClass: {{ .Values.postgresql.persistence.storageClass }}
+    {{- end }}
+  {{- if and .Values.postgresql.persistence .Values.postgresql.persistence.extra -}}
+  {{- tpl (toYaml .Values.postgresql.persistence.extra) . | nindent 4 }}
+  {{- end }}
+  {{- if and .Values.postgresql.operator .Values.postgresql.operator.operatorSpecExtra -}}
+  {{- tpl (toYaml .Values.postgresql.operator.operatorSpecExtra) . | nindent 2 }}
+  {{- end }}
+{{- end }}

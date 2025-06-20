@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "galaxy.fullname" . }}-nginx
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  - port: {{ .Values.service.port }}
+    {{- if eq .Values.service.type "NodePort" }}
+    nodePort: {{ .Values.service.nodePort }}
+    {{- end }}
+    targetPort: galaxy-nginx
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/component: galaxy-nginx
+    {{- include "galaxy.selectorLabels" . | nindent 4 }}

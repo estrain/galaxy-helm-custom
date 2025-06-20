@@ -1,0 +1,16 @@
+{{- if .Values.influxdb.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-galaxy-dashboard
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  {{- $root := . }}
+  {{ range $path, $bytes := .Files.Glob "files/dashboards/*" }}
+    {{- base $path }}: |
+{{ (tpl ($root.Files.Get $path) $) | indent 4 }}
+  {{ end }}
+{{- end }}

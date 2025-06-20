@@ -1,0 +1,46 @@
+# This canary ingress is used for cloudman autoscaling support
+# on activity. A 200 on this endpoint indicates that a user
+# is active on the system, and the cluster can be autoscaled
+# in anticipation of jobs
+{{ if .Values.ingress.canary.enabled -}}
+{{- $fullName := include "galaxy.fullname" . -}}
+{{- $ingressPath := .Values.ingress.path -}}
+{{- $servicePort := .Values.service.port -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-activity-canary
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+  annotations:
+  {{- with .Values.ingress.annotations }}
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.ingressClassName }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          - path: {{ trimSuffix "/" $ingressPath }}/api/users
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $fullName }}-nginx
+                port:
+                  number: {{ $servicePort }}
+    {{- end }}
+{{- end }}
+

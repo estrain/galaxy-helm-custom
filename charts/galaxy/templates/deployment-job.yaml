@@ -1,0 +1,214 @@
+{{- range $handler_num, $e := until (int $.Values.jobHandlers.replicaCount) }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "galaxy.fullname" $ }}-job-{{ $handler_num }}
+  labels:
+    {{- include "galaxy.labels" $ | nindent 4 }}
+{{- with $.Values.jobHandlers.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "galaxy.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: galaxy-job-handler
+  template:
+    metadata:
+      labels:
+        {{- include "galaxy.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: galaxy-job-handler
+      annotations:
+        checksum/galaxy_conf: {{ include (print $.Template.BasePath "/configs-galaxy.yaml") $ | sha256sum }}
+        checksum/galaxy_rules: {{ include (print $.Template.BasePath "/configmap-galaxy-rules.yaml") $ | sha256sum }}
+        checksum/galaxy_extras: {{ include (print $.Template.BasePath "/configmap-extra-files.yaml") $ | sha256sum }}
+        {{- with $.Values.jobHandlers.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "galaxy.serviceAccountName" $ }}
+      {{- with $.Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if $.Values.jobHandlers.podSpecExtra -}}
+        {{- tpl (toYaml $.Values.jobHandlers.podSpecExtra) (set $ "handler_num" $handler_num) | nindent 6 }}
+      {{- end }}
+      initContainers:
+        - name: {{ $.Chart.Name }}-wait-db
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          args: ['sh', '-c', '{{ include "galaxy.init-container-wait-command" $ }} sleep {{ $.Values.jobHandlers.startupDelay }};']
+          volumeMounts:
+            - name: galaxy-data
+              mountPath: /galaxy/server/config/mutable/
+              subPath: config
+        {{- if $.Values.extraInitContainers -}}
+        {{- range $each := $.Values.extraInitContainers -}}
+        {{- if $each.applyToJob -}}
+        {{- print "- " | nindent 8 -}}
+        {{- tpl ((unset (unset (unset ($each | deepCopy) "applyToJob") "applyToWeb") "applyToWorkflow") | toYaml | indent 10 | trim) $ -}}
+        {{- end }}
+        {{- end }}
+        {{- end }}
+      containers:
+        - name: {{ $.Chart.Name }}-job-{{ $handler_num }}
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          {{ include "galaxy.podEnvVars" $ }}
+          args: [
+            'sh', '-c',
+            '{{- if $.Values.extraInitCommands -}}
+             {{- tpl $.Values.extraInitCommands $ | nindent 13 -}};
+             {{- end -}}
+             python /galaxy/server/scripts/galaxy-main -c $GALAXY_CONFIG_FILE --server-name job_handler_{{ $handler_num }} --attach-to-pool job-handlers']
+          {{- if $.Values.jobHandlers.startupProbe.enabled }}
+          startupProbe:
+            exec:
+              command: [
+                'sh', '-c',
+                'python /tmp/probedb.py -c $GALAXY_CONFIG_OVERRIDE_DATABASE_CONNECTION -s job_handler_{{ $handler_num }} -o $HOSTNAME'
+              ]
+            initialDelaySeconds: {{ $.Values.jobHandlers.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.jobHandlers.startupProbe.periodSeconds }}
+            failureThreshold: {{ $.Values.jobHandlers.startupProbe.failureThreshold }}
+            timeoutSeconds: {{ $.Values.jobHandlers.startupProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if $.Values.jobHandlers.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command: [
+                'sh', '-c',
+                'python /tmp/probedb.py -c $GALAXY_CONFIG_OVERRIDE_DATABASE_CONNECTION -s job_handler_{{ $handler_num }} -o $HOSTNAME'
+              ]
+            initialDelaySeconds: {{ $.Values.jobHandlers.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.jobHandlers.readinessProbe.periodSeconds }}
+            failureThreshold: {{ $.Values.jobHandlers.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ $.Values.jobHandlers.readinessProbe.timeoutSeconds }}
+          {{- end }}
+          {{- if $.Values.jobHandlers.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command: [
+                'sh', '-c',
+                'python /tmp/probedb.py -c $GALAXY_CONFIG_OVERRIDE_DATABASE_CONNECTION -s job_handler_{{ $handler_num }} -o $HOSTNAME'
+              ]
+            initialDelaySeconds: {{ $.Values.jobHandlers.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ $.Values.jobHandlers.livenessProbe.periodSeconds }}
+            failureThreshold: {{ $.Values.jobHandlers.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ $.Values.jobHandlers.livenessProbe.timeoutSeconds }}
+          {{- end }}
+          volumeMounts:
+            - name: extra-files-probe-script
+              mountPath: /tmp/probedb.py
+              subPath: probedb.py
+            {{- range $key, $entry := $.Values.extraFileMappings -}}
+            {{- if $entry.applyToJob }}
+            - name: {{ include "galaxy.getExtraFilesUniqueName" $key }}
+              mountPath: {{ $key }}
+              subPath: {{ include "galaxy.getFilenameFromPath" $key }}
+            {{- end }}
+            {{- end }}
+            {{- range $key,$entry := $.Values.configs }}
+            {{ if $entry -}}
+            - name: galaxy-conf-files
+              mountPath: /galaxy/server/config/{{ $key }}
+              subPath: {{ $key }}
+            {{- end -}}
+            {{- end }}
+            {{- range $key,$entry := $.Values.jobs.rules }}
+            - name: galaxy-job-rules
+              mountPath: /galaxy/server/lib/galaxy/jobs/rules/{{ $key }}
+              subPath: {{ $key }}
+            {{- end }}
+            - name: galaxy-data
+              mountPath: /galaxy/server/config/mutable/
+              subPath: config
+            - name: galaxy-data
+              mountPath: {{ $.Values.persistence.mountPath }}
+            {{- if $.Values.setupJob.downloadToolConfs.enabled }}
+            - name: galaxy-data
+              mountPath: {{ $.Values.setupJob.downloadToolConfs.volume.mountPath }}
+              subPath: {{ $.Values.setupJob.downloadToolConfs.volume.subPath }}
+            {{- end }}
+            {{- if $.Values.refdata.enabled }}
+            - name: refdata-gxy
+              mountPath: /cvmfs/data.galaxyproject.org
+            {{- if eq $.Values.refdata.type "cvmfs" }}
+              subPath: data.galaxyproject.org
+              # CVMFS automount volumes must be mounted with HostToContainer mount propagation.
+              mountPropagation: HostToContainer
+            {{- end }}
+            {{- end }}
+            {{- if $.Values.extraVolumeMounts }}
+            {{- tpl ($.Values.extraVolumeMounts | toYaml | nindent 12) $ }}
+            {{- end }}
+          resources:
+            {{- toYaml $.Values.resources | nindent 12 }}
+      volumes:
+        - name: extra-files-probe-script
+          configMap:
+            name: {{ template "galaxy.fullname" $ }}-probedb-py
+        - name: galaxy-conf-files
+          {{- if $.Values.useSecretConfigs }}
+          secret:
+            secretName: {{ template "galaxy.fullname" $ }}-configs
+          {{- else }}
+          configMap:
+            name: {{ template "galaxy.fullname" $ }}-configs
+          {{- end }}
+        {{- range $key, $entry := $.Values.extraFileMappings -}}
+        {{- if $entry.applyToJob }}
+        - name: {{ include "galaxy.getExtraFilesUniqueName" $key }}
+          {{- if $entry.useSecret }}
+          secret:
+            secretName: {{ printf "%s-%s" (include "galaxy.fullname" $) (include "galaxy.getExtraFilesUniqueName" $key) }}
+          {{- else }}
+          configMap:
+            name: {{ printf "%s-%s" (include "galaxy.fullname" $) (include "galaxy.getExtraFilesUniqueName" $key) }}
+          {{- end }}
+        {{- end }}
+        {{- end }}
+        - name: galaxy-job-rules
+          configMap:
+            name: {{ template "galaxy.fullname" $ }}-job-rules
+        - name: galaxy-data
+          {{- if $.Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ template "galaxy.pvcname" $ }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if $.Values.refdata.enabled }}
+        - name: refdata-gxy
+          persistentVolumeClaim:
+            claimName: {{ template "galaxy.fullname" $ -}}-refdata-gxy-pvc
+        {{- end }}
+        {{- if $.Values.extraVolumes }}
+        {{- tpl ($.Values.extraVolumes | toYaml | nindent 8) $ }}
+        {{- end }}
+      {{- with $.Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with $.Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with $.Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- end }}

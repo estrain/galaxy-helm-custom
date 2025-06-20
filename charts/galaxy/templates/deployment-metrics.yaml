@@ -1,0 +1,90 @@
+{{- if .Values.metrics.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "galaxy.fullname" . }}-metrics-scraper
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+{{- with .Values.metrics.annotations }}
+  annotations:
+{{ toYaml . | indent 4 }}
+{{- end }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "galaxy.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: galaxy-metrics
+  template:
+    metadata:
+      {{- with .Values.metrics.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "galaxy.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: galaxy-metrics
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "galaxy.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.metrics.podSpecExtra -}}
+        {{- tpl (toYaml .Values.metrics.podSpecExtra) . | nindent 6 }}
+      {{- end }}
+      containers:
+      - name: galaxy-metrics-scraper
+        image: "{{ .Values.metrics.image.repository }}:{{ .Values.metrics.image.tag }}"
+        imagePullPolicy: {{ .Values.metrics.image.pullPolicy }}
+        env:
+          - name: PGHOST
+            value: {{ include "galaxy-postgresql.servicename" . }}
+          - name: PGDATABASE
+            value: galaxy
+          - name: PGUSER
+            value: {{ .Values.postgresql.galaxyDatabaseUser }}
+          - name: PGPASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: '{{ include "galaxy.galaxyDbSecretName" . }}'
+                key: '{{ include "galaxy.galaxyDbSecretKey" . }}'
+          - name: INFLUX_URL
+            value: "{{ .Values.influxdb.url }}"
+          - name: INFLUX_DB
+            value: "{{ .Values.influxdb.database }}"
+          - name: INFLUX_USER
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-galaxy-secrets"
+                key: influxdb-user
+          - name: INFLUX_PASS
+            valueFrom:
+              secretKeyRef:
+                name: "{{ .Release.Name }}-galaxy-secrets"
+                key: influxdb-password
+        volumeMounts:
+          - mountPath: /temp-ram-disk
+            name: temp-ram-disk
+      volumes:
+        - name: temp-ram-disk
+          emptyDir:
+            medium: "Memory"
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

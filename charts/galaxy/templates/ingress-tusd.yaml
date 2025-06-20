@@ -1,0 +1,42 @@
+{{- if and .Values.tusd.enabled .Values.tusd.ingress.enabled -}}
+{{- $fullName := include "galaxy.fullname" . -}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $fullName }}-tusd
+  labels:
+    {{- include "galaxy.labels" . | nindent 4 }}
+  {{- with .Values.tusd.ingress.annotations }}
+  annotations:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.tusd.ingress.ingressClassName }}
+  {{- if .Values.tusd.ingress.tls }}
+  tls:
+    {{- range .Values.tusd.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.tusd.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ template "galaxy.fullname" $ }}-tusd
+                port:
+                  number: 1080
+          {{- end }}
+    {{- end }}
+  {{- end }}
+
