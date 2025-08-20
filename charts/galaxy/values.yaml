@@ -411,7 +411,9 @@ resources:
     memory: 7G
     ephemeral-storage: 10Gi
 
-nodeSelector: {}
+nodeSelector: {
+  eks.amazonaws.com/nodegroup: default
+}
 
 tolerations: []
 
