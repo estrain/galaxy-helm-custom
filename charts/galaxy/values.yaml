@@ -415,6 +415,9 @@ nodeSelector: {
   eks.amazonaws.com/nodegroup: default
 }
 
+nodeSelectorJobHandler: {
+  eks.amazonaws.com/nodegroup: jobhandler
+}
 tolerations: []
 
 affinity: {}
