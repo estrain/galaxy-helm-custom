@@ -3,14 +3,14 @@ entries:
   galaxy:
   - apiVersion: v2
     appVersion: 24.1.1
-    created: "2025-08-20T18:58:10.113253-04:00"
+    created: "2025-08-25T16:55:34.880617-04:00"
     description: Chart for Galaxy, an open, web-based platform for accessible, reproducible,
       and transparent computational biomedical research.
-    digest: 3b93828efe1de26530c035d33074df22a539a245ec22cd1fd0317de06b484d40
+    digest: e1c7041ace662d46b24b33cd8cc20c278eac178d4394b3fcafa63bc97895d55e
     icon: https://galaxyproject.org/images/galaxy-logos/galaxy_project_logo_square.png
     name: galaxy
     type: application
     urls:
     - https://estrain.github.io/galaxy-helm-custom/galaxy-5.19.0-custom.tgz
     version: 5.19.0-custom
-generated: "2025-08-20T18:58:10.110229-04:00"
+generated: "2025-08-25T16:55:34.876878-04:00"
