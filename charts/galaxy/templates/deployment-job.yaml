@@ -199,7 +199,7 @@ spec:
         {{- if $.Values.extraVolumes }}
         {{- tpl ($.Values.extraVolumes | toYaml | nindent 8) $ }}
         {{- end }}
-      {{- with $.Values.nodeSelector }}
+      {{- with $.Values.nodeSelectorJobHandler}}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
       {{- end }}
