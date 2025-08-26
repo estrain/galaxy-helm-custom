@@ -247,7 +247,7 @@ setupJob:
     fsGroup: 101
   ttlSecondsAfterFinished: 300
   downloadToolConfs:
-    enabled: true
+    enabled: false 
     # Uses Galaxy's shared file system volume
     volume:
       subPath: cvmfsclone # on galaxy-data volume (avoid config, tools, lib, etc...)
